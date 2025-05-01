@@ -59,38 +59,44 @@ func ping(host string, count int) {
 
 func httpPing(host string, times int) {
 	url := fmt.Sprintf("http://%s", host)
-	cint := make(chan int)
+	counterChan := make(chan int)
 	counter := 0
+	var totalTime time.Duration
 
 	headers := make(http.Header)
-	headers.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3") // This is necessary to youtube because of scrapping and automation mitigation
+	headers.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3")
 
 	httpCaller := probing.NewHttpCaller(url,
 		probing.WithHTTPCallerCallFrequency(time.Second),
 		probing.WithHTTPCallerHeaders(headers),
 		probing.WithHTTPCallerOnResp(func(suite *probing.TraceSuite, info *probing.HTTPCallInfo) {
+			requestTime := suite.GetGeneralEnd().Sub(suite.GetGeneralStart())
 			fmt.Printf("got resp, status code: %d, latency: %s\n",
 				info.StatusCode,
-				suite.GetGeneralEnd().Sub(suite.GetGeneralStart()),
+				requestTime,
 			)
 			counter++
-			cint <- counter
+			totalTime += requestTime
+			counterChan <- counter
 		}),
 	)
 
 	go httpCaller.Run()
 
-	for count := range cint {
+	for count := range counterChan {
 		if count >= times {
 			httpCaller.Stop()
+			// avgTime := time.Duration(totalTime / count)
+			slog.Info("Average time in miliseconds", slog.Float64("average", float64(totalTime.Milliseconds())/float64(count)))
 			break
 		}
 	}
 }
 func main() {
-	hosts := []string{"google.com", "rnp.br", "youtube.com"}
-	for _, host := range hosts {
-		ping(host, 11)
-		httpPing(host, 11)
-	}
+	// hosts := []string{"google.com", "rnp.br", "youtube.com"}
+	// for _, host := range hosts {
+	// 	ping(host, 11)
+	// 	httpPing(host, 11)
+	// }
+	httpPing("rnp.br", 11)
 }
