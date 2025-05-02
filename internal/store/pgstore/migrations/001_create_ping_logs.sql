@@ -6,7 +6,7 @@ create table ping_logs (
   ping_count integer,
   created_at timestamp
   with
-    time zone default now (),
+    time zone default now ()
 );
 
 ---- create above / drop below ----
