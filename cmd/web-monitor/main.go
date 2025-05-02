@@ -1,105 +1,82 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
-	"net/http"
-	"time"
+	"os"
 
-	probing "github.com/prometheus-community/pro-bing"
+	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/joho/godotenv"
+	"github.com/web-monitor/cmd/web-monitor/probes"
+	"github.com/web-monitor/internal/store/pgstore"
 )
 
-func ping(host string, count int) {
-	url := fmt.Sprintf("%s", host)
-	pinger, err := probing.NewPinger(url)
-	if err != nil {
-		panic(err)
-	}
-	pinger.Count = count
-
-	pinger.OnRecv = func(pkt *probing.Packet) {
-		fmt.Printf("%d bytes from %s: icmp_seq=%d time=%v\n",
-			pkt.Nbytes, pkt.IPAddr, pkt.Seq, pkt.Rtt)
-	}
-
-	pinger.OnDuplicateRecv = func(pkt *probing.Packet) {
-		fmt.Printf("%d bytes from %s: icmp_seq=%d time=%v ttl=%v (DUP!)\n",
-			pkt.Nbytes, pkt.IPAddr, pkt.Seq, pkt.Rtt, pkt.TTL)
-	}
-
-	pinger.OnFinish = func(stats *probing.Statistics) {
-		fmt.Printf("\n--- %s ping statistics ---\n", stats.Addr)
-		fmt.Printf("%d packets transmitted, %d packets received, %v%% packet loss\n",
-			stats.PacketsSent, stats.PacketsRecv, stats.PacketLoss)
-		fmt.Printf("round-trip min/avg/max/stddev = %v/%v/%v/%v\n",
-			stats.MinRtt, stats.AvgRtt, stats.MaxRtt, stats.StdDevRtt)
-	}
-
-	fmt.Printf("PING %s (%s):\n", pinger.Addr(), pinger.IPAddr())
-
-	err = pinger.Run() // Blocks until finished.
-	if err != nil {
-		panic(err)
-	}
-	stats := pinger.Statistics() // get send/receive/duplicate/rtt stats
-
-	slog.Info("Packets:",
-		slog.Int("sent", stats.PacketsSent),
-		slog.Int("received", stats.PacketsRecv),
-		slog.Float64("packet loss", stats.PacketLoss),
-	)
-
-	slog.Info("Approximate round trip times in milli-seconds:",
-		slog.Float64("minimum", stats.MinRtt.Seconds()*1000),
-		slog.Float64("average", stats.AvgRtt.Seconds()*1000),
-		slog.Float64("maximum", stats.MaxRtt.Seconds()*1000),
-		slog.Float64("standardDeviation", stats.StdDevRtt.Seconds()*1000),
-	)
-
-	slog.Info("Stored information:",
-		slog.Float64("packet loss percentage", stats.PacketLoss),
-		slog.Int("average rtt in milliseconds", int(stats.AvgRtt.Seconds()*1000)),
-	)
+func get(envVar string) string {
+	return os.Getenv(envVar)
 }
 
-func httpPing(host string, times int) {
-	url := fmt.Sprintf("http://%s", host)
-	counterChan := make(chan int)
-	counter := 0
-	var totalTime time.Duration
-
-	headers := make(http.Header)
-	headers.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3")
-
-	httpCaller := probing.NewHttpCaller(url,
-		probing.WithHTTPCallerCallFrequency(time.Second),
-		probing.WithHTTPCallerHeaders(headers),
-		probing.WithHTTPCallerOnResp(func(suite *probing.TraceSuite, info *probing.HTTPCallInfo) {
-			requestTime := suite.GetGeneralEnd().Sub(suite.GetGeneralStart())
-			fmt.Printf("got resp, status code: %d, latency: %s\n",
-				info.StatusCode,
-				requestTime,
-			)
-			counter++
-			totalTime += requestTime
-			counterChan <- counter
-		}),
-	)
-
-	go httpCaller.Run()
-
-	for count := range counterChan {
-		if count >= times {
-			httpCaller.Stop()
-			slog.Info("Average time in miliseconds", slog.Float64("average", float64(totalTime.Milliseconds())/float64(count)))
-			break
-		}
-	}
-}
 func main() {
+	if err := godotenv.Load(); err != nil {
+		panic(err)
+	}
+
+	ctx := context.Background()
+	connString := fmt.Sprintf(
+		"user=%s password=%s host=%s port=%s dbname=%s",
+		get("DATABASE_USER"),
+		get("DATABASE_PASSWORD"),
+		get("DATABASE_HOST"),
+		get("DATABASE_PORT"),
+		get("DATABASE_NAME"),
+	)
+	pool, err := pgxpool.New(ctx, connString)
+
+	if err != nil {
+		slog.Error("Unable to connect to database", slog.Any("error", err))
+		panic(err)
+	}
+
+	defer pool.Close()
+
+	if err := pool.Ping(ctx); err != nil {
+		slog.Error("Unable to ping database", slog.Any("error", err))
+		panic(err)
+	}
+
+	queries := pgstore.New(pool)
+
+	slog.Info("Connected to database")
+
 	hosts := []string{"google.com", "rnp.br", "youtube.com"}
-	for _, host := range hosts {
-		ping(host, 11)
-		httpPing(host, 11)
+	for {
+
+		for _, host := range hosts {
+			count := 11
+
+			averageLatency, packetLossPercentage, err := probes.Ping(host, count)
+
+			if err != nil {
+				slog.Error("Error pinging host", slog.String("host", host), slog.Any("error", err))
+			}
+
+			queries.InsertPing(ctx, pgstore.InsertPingParams{
+				LatencyAvgMs:    pgtype.Int4{Int32: int32(averageLatency)},
+				LossRatePercent: pgtype.Int4{Int32: int32(packetLossPercentage)},
+				PingCount:       pgtype.Int4{Int32: int32(count)},
+			})
+
+			averageLatency, err = probes.HttpPing(host, count)
+
+			if err != nil {
+				slog.Error("Error pinging host", slog.String("host", host), slog.Any("error", err))
+			}
+
+			queries.InsertHttp(ctx, pgstore.InsertHttpParams{
+				LatencyAvgMs: pgtype.Int4{Int32: int32(averageLatency)},
+				HttpCount:    pgtype.Int4{Int32: int32(count)},
+			})
+		}
 	}
 }
