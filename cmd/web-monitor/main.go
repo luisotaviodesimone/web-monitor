@@ -97,10 +97,9 @@ func httpPing(host string, times int) {
 	}
 }
 func main() {
-	// hosts := []string{"google.com", "rnp.br", "youtube.com"}
-	// for _, host := range hosts {
-	// 	ping(host, 11)
-	// 	httpPing(host, 11)
-	// }
-	httpPing("rnp.br", 11)
+	hosts := []string{"google.com", "rnp.br", "youtube.com"}
+	for _, host := range hosts {
+		ping(host, 11)
+		httpPing(host, 11)
+	}
 }
