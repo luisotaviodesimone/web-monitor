@@ -49,11 +49,16 @@ func ping(host string, count int) {
 		slog.Float64("packet loss", stats.PacketLoss),
 	)
 
-	slog.Info("Approximate round trip times in milli-seconds",
+	slog.Info("Approximate round trip times in milli-seconds:",
 		slog.Float64("minimum", stats.MinRtt.Seconds()*1000),
 		slog.Float64("average", stats.AvgRtt.Seconds()*1000),
 		slog.Float64("maximum", stats.MaxRtt.Seconds()*1000),
 		slog.Float64("standardDeviation", stats.StdDevRtt.Seconds()*1000),
+	)
+
+	slog.Info("Stored information:",
+		slog.Float64("packet loss percentage", stats.PacketLoss),
+		slog.Int("average rtt in milliseconds", int(stats.AvgRtt.Seconds()*1000)),
 	)
 }
 
@@ -86,7 +91,6 @@ func httpPing(host string, times int) {
 	for count := range counterChan {
 		if count >= times {
 			httpCaller.Stop()
-			// avgTime := time.Duration(totalTime / count)
 			slog.Info("Average time in miliseconds", slog.Float64("average", float64(totalTime.Milliseconds())/float64(count)))
 			break
 		}
