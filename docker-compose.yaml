@@ -1,0 +1,66 @@
+services:
+  golang:
+    build: .
+    container_name: golang
+    depends_on:
+      init-db:
+        condition: service_completed_successfully
+    env_file:
+    - path: ./.env
+      required: true
+    networks:
+      - web_monitor
+  init-db:
+    build:
+      context: ./golang
+    command: go run ./cmd/tools/terndotenv/main.go
+    container_name: init-db
+    depends_on:
+      postgres:
+        condition: service_started
+    env_file:
+    - path: ./.env
+      required: true
+    networks:
+      - web_monitor
+  pgadmin:
+    container_name: pgadmin
+    depends_on:
+    - postgres
+    environment:
+      PGADMIN_DEFAULT_EMAIL: luisotaviodesimone@gmail.com
+      PGADMIN_DEFAULT_PASSWORD: admin
+    image: dpage/pgadmin4:latest
+    ports:
+    - 127.0.0.1:8081:80
+    volumes:
+    - pgadmin:/var/lib/pgadmin
+    networks:
+      - web_monitor
+  postgres:
+    container_name: postgres
+    env_file:
+    - path: ./.env
+      required: true
+    environment:
+    - POSTGRES_DB=${DATABASE_NAME}
+    - POSTGRES_PASSWORD=${DATABASE_PASSWORD}
+    - POSTGRES_USER=${DATABASE_USER}
+    hostname: postgres
+    image: postgres:17.4-alpine
+    ports:
+    - ${DATABASE_PORT:-5432}:5432
+    restart: unless-stopped
+    volumes:
+    - db:/var/lib/postgresql/data
+    networks:
+      - web_monitor
+volumes:
+  db:
+    driver: local
+  pgadmin:
+    driver: local
+networks:
+  web_monitor:
+    driver: bridge
+
