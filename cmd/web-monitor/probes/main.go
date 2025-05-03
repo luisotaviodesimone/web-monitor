@@ -81,7 +81,8 @@ func HttpPing(host string, times int) (averageLatency int, e error) {
 		probing.WithHTTPCallerTimeout(2*time.Second),
 		probing.WithHTTPCallerOnResp(func(suite *probing.TraceSuite, info *probing.HTTPCallInfo) {
 			requestTime := suite.GetGeneralEnd().Sub(suite.GetGeneralStart())
-			fmt.Printf("got resp, status code: %d, latency: %s\n",
+			fmt.Printf("got %s resp, status code: %d, latency: %s\n",
+        host,
 				info.StatusCode,
 				requestTime,
 			)
