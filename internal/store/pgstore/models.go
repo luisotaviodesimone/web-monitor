@@ -10,6 +10,7 @@ import (
 
 type HttpLog struct {
 	ID           int32
+	Host         pgtype.Text
 	LatencyAvgMs pgtype.Int4
 	HttpCount    pgtype.Int4
 	CreatedAt    pgtype.Timestamptz
@@ -17,6 +18,7 @@ type HttpLog struct {
 
 type PingLog struct {
 	ID              int32
+	Host            pgtype.Text
 	LatencyAvgMs    pgtype.Int4
 	LossRatePercent pgtype.Int4
 	PingCount       pgtype.Int4

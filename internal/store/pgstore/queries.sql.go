@@ -13,20 +13,21 @@ import (
 
 const insertHttp = `-- name: InsertHttp :one
 INSERT INTO
-  http_logs ("latency_avg_ms", "http_count")
+  http_logs ("host", "latency_avg_ms", "http_count")
 VALUES
-  ($1, $2)
+  ($1, $2, $3)
 RETURNING
   "id"
 `
 
 type InsertHttpParams struct {
+	Host         pgtype.Text
 	LatencyAvgMs pgtype.Int4
 	HttpCount    pgtype.Int4
 }
 
 func (q *Queries) InsertHttp(ctx context.Context, arg InsertHttpParams) (int32, error) {
-	row := q.db.QueryRow(ctx, insertHttp, arg.LatencyAvgMs, arg.HttpCount)
+	row := q.db.QueryRow(ctx, insertHttp, arg.Host, arg.LatencyAvgMs, arg.HttpCount)
 	var id int32
 	err := row.Scan(&id)
 	return id, err
@@ -35,24 +36,31 @@ func (q *Queries) InsertHttp(ctx context.Context, arg InsertHttpParams) (int32, 
 const insertPing = `-- name: InsertPing :one
 INSERT INTO
   ping_logs (
+    "host",
     "latency_avg_ms",
     "loss_rate_percent",
     "ping_count"
   )
 VALUES
-  ($1, $2, $3)
+  ($1, $2, $3, $4)
 RETURNING
   "id"
 `
 
 type InsertPingParams struct {
+	Host            pgtype.Text
 	LatencyAvgMs    pgtype.Int4
 	LossRatePercent pgtype.Int4
 	PingCount       pgtype.Int4
 }
 
 func (q *Queries) InsertPing(ctx context.Context, arg InsertPingParams) (int32, error) {
-	row := q.db.QueryRow(ctx, insertPing, arg.LatencyAvgMs, arg.LossRatePercent, arg.PingCount)
+	row := q.db.QueryRow(ctx, insertPing,
+		arg.Host,
+		arg.LatencyAvgMs,
+		arg.LossRatePercent,
+		arg.PingCount,
+	)
 	var id int32
 	err := row.Scan(&id)
 	return id, err
