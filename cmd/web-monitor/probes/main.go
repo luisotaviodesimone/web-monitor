@@ -9,7 +9,6 @@ import (
 	probing "github.com/prometheus-community/pro-bing"
 )
 
-
 func Ping(host string, count int) (averageLatency int, packetLoss float64, e error) {
 	url := fmt.Sprintf("%s", host)
 	pinger, err := probing.NewPinger(url)
@@ -61,10 +60,10 @@ func Ping(host string, count int) (averageLatency int, packetLoss float64, e err
 		slog.Float64("packet loss percentage", stats.PacketLoss),
 		slog.Int("average rtt in milliseconds", int(stats.AvgRtt.Seconds()*1000)),
 	)
-  averageLatency = int(stats.AvgRtt.Seconds() * 1000)
-  packetLoss = stats.PacketLoss
+	averageLatency = int(stats.AvgRtt.Seconds() * 1000)
+	packetLoss = stats.PacketLoss
 
-  return averageLatency, packetLoss, nil
+	return averageLatency, packetLoss, nil
 }
 
 func HttpPing(host string, times int) (averageLatency int, e error) {
@@ -77,8 +76,9 @@ func HttpPing(host string, times int) (averageLatency int, e error) {
 	headers.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3")
 
 	httpCaller := probing.NewHttpCaller(url,
-		probing.WithHTTPCallerCallFrequency(time.Second),
+		probing.WithHTTPCallerCallFrequency(2*time.Second),
 		probing.WithHTTPCallerHeaders(headers),
+		probing.WithHTTPCallerTimeout(2*time.Second),
 		probing.WithHTTPCallerOnResp(func(suite *probing.TraceSuite, info *probing.HTTPCallInfo) {
 			requestTime := suite.GetGeneralEnd().Sub(suite.GetGeneralStart())
 			fmt.Printf("got resp, status code: %d, latency: %s\n",
@@ -97,9 +97,9 @@ func HttpPing(host string, times int) (averageLatency int, e error) {
 		if count >= times {
 			httpCaller.Stop()
 			slog.Info("Average time in miliseconds", slog.Float64("average", float64(totalTime.Milliseconds())/float64(count)))
-      return int(float64(totalTime.Milliseconds())/float64(count)), nil
+			return int(float64(totalTime.Milliseconds()) / float64(count)), nil
 		}
 	}
 
-  return -1, fmt.Errorf("error getting average latency")
+	return -1, fmt.Errorf("error getting average latency")
 }

@@ -11,6 +11,7 @@ import (
 	"github.com/joho/godotenv"
 	"github.com/web-monitor/cmd/web-monitor/probes"
 	"github.com/web-monitor/internal/store/pgstore"
+	// "github.com/web-monitor/internal/store/pgstore"
 )
 
 func get(envVar string) string {
@@ -51,9 +52,8 @@ func main() {
 
 	hosts := []string{"google.com", "rnp.br", "youtube.com"}
 	for {
-
 		for _, host := range hosts {
-			count := 11
+			count := 5
 
 			averageLatency, packetLossPercentage, err := probes.Ping(host, count)
 
@@ -62,9 +62,10 @@ func main() {
 			}
 
 			queries.InsertPing(ctx, pgstore.InsertPingParams{
-				LatencyAvgMs:    pgtype.Int4{Int32: int32(averageLatency)},
-				LossRatePercent: pgtype.Int4{Int32: int32(packetLossPercentage)},
-				PingCount:       pgtype.Int4{Int32: int32(count)},
+				Host:            pgtype.Text{String: host, Valid: true},
+				LatencyAvgMs:    pgtype.Int4{Int32: int32(averageLatency), Valid: true},
+				LossRatePercent: pgtype.Int4{Int32: int32(packetLossPercentage), Valid: true},
+				PingCount:       pgtype.Int4{Int32: int32(count), Valid: true},
 			})
 
 			averageLatency, err = probes.HttpPing(host, count)
@@ -74,8 +75,9 @@ func main() {
 			}
 
 			queries.InsertHttp(ctx, pgstore.InsertHttpParams{
-				LatencyAvgMs: pgtype.Int4{Int32: int32(averageLatency)},
-				HttpCount:    pgtype.Int4{Int32: int32(count)},
+				Host:         pgtype.Text{String: host, Valid: true},
+				LatencyAvgMs: pgtype.Int4{Int32: int32(averageLatency), Valid: true},
+				HttpCount:    pgtype.Int4{Int32: int32(count), Valid: true},
 			})
 		}
 	}
